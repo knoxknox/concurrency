@@ -80,15 +80,15 @@ When using a mutex, you can "lock" a piece of data so only that specific Thread 
 
 Let's take a look at an example (in Ruby):
 
-<!--language-ruby-->
+```ruby
+# imagine `data` is some shared state
 
-    # imagine `data` is some shared state
+def update
+  mutex = Mutex.new
 
-    def update
-      mutex = Mutex.new
-
-      Thread.new { mutex.synchronize { data += 1} }.join
-    end
+  Thread.new { mutex.synchronize { data += 1} }.join
+end
+```
 
 > Note: for the full Mutex API see [http://www.ruby-doc.org/core-2.1.5/Mutex.html](http://www.ruby-doc.org/core-2.1.5/Mutex.html)
 
@@ -164,47 +164,47 @@ OK, with that out of the way let's now review the example code...
 
 The requirement in the code is that the two bank accounts must have at least 1000 in total between them. If we try to remove an amount from either account which results in the total amount falling below 1000 then we should not complete that transaction:
 
-<!--language-scheme-->
+```clojure
+(def current-account (ref 500))
+(def savings-account (ref 600))
 
-    (def current-account (ref 500))
-    (def savings-account (ref 600))
-    
-    (defn withdraw [from constraint amount]
-      (dosync
-        (let [total (+ @from (ensure constraint))]
-          (Thread/sleep 1000) ; allows for a more visible context switch
-          (if (>= (- total amount) 1000)
-            (alter from - amount)
-            (println "Sorry, can't withdraw due to constraint violation")))))
-    
-    (println "STATE BEFORE MODIFYING")
-    (println "Current Account balance is" @current-account)
-    (println "Savings Account balance is" @savings-account)
-    (println "Total balance is" (+ @current-account @savings-account))
-    
-    (future (withdraw current-account savings-account 100))
-    (future (withdraw savings-account current-account 100))
-    
-    (Thread/sleep 4000)
-    
-    (println "STATE AFTER MODIFYING")
-    (println "Current Account balance is" @current-account)
-    (println "Savings Account balance is" @savings-account)
-    (println "Total balance is" (+ @current-account @savings-account))
+(defn withdraw [from constraint amount]
+  (dosync
+    (let [total (+ @from (ensure constraint))]
+      (Thread/sleep 1000) ; allows for a more visible context switch
+      (if (>= (- total amount) 1000)
+        (alter from - amount)
+        (println "Sorry, can't withdraw due to constraint violation")))))
+
+(println "STATE BEFORE MODIFYING")
+(println "Current Account balance is" @current-account)
+(println "Savings Account balance is" @savings-account)
+(println "Total balance is" (+ @current-account @savings-account))
+
+(future (withdraw current-account savings-account 100))
+(future (withdraw savings-account current-account 100))
+
+(Thread/sleep 4000)
+
+(println "STATE AFTER MODIFYING")
+(println "Current Account balance is" @current-account)
+(println "Savings Account balance is" @savings-account)
+(println "Total balance is" (+ @current-account @savings-account))
+```
 
 The output of the above code could look like the following (but refer to the below note which explains why in some instances, because the transaction can fail and automatically retry, you could possibly see the failure message informing the user that the transaction failed even when it was successful):
 
-<!--language-bash-->
+```bash
+STATE BEFORE MODIFYING
+Current Account balance is 500
+Savings Account balance is 600
+Total balance is 1100
 
-    STATE BEFORE MODIFYING
-    Current Account balance is 500
-    Savings Account balance is 600
-    Total balance is 1100
-
-    STATE AFTER MODIFYING
-    Current Account balance is 500
-    Savings Account balance is 500
-    Total balance is 1000
+STATE AFTER MODIFYING
+Current Account balance is 500
+Savings Account balance is 500
+Total balance is 1000
+```
 
 > Note: `println` is sending data to *stdout* (defined as a thread-local dynamic variable). This variable is binded to the current Thread by default (meaning values don't cross over into other Threads).  
 
@@ -227,92 +227,92 @@ In the following example we have downloaded the Clojure runtime as a jar (from [
 
 Within our code you'll see we're using methods that correlate to what would be recognisable to Clojure's environment: `LockingTransaction.run_in_transaction`, `@balance.set` and `@balance.deref`.
 
-<!--language-ruby-->
+```ruby
+$CLASSPATH << "clojure-1.6.0/clojure-1.6.0.jar"
 
-    $CLASSPATH << "clojure-1.6.0/clojure-1.6.0.jar"
+require "java"
+java_import "clojure.lang.Ref"
+java_import "clojure.lang.LockingTransaction"
 
-    require "java"
-    java_import "clojure.lang.Ref"
-    java_import "clojure.lang.LockingTransaction"
+class Account
+  attr_reader :name
 
-    class Account
-      attr_reader :name
+  def initialize(name, initial_balance)
+    @name    = name
+    @balance = Ref.new initial_balance
+  end
 
-      def initialize(name, initial_balance)
-        @name    = name
-        @balance = Ref.new initial_balance
-      end
+  def balance
+    @balance.deref
+  end
 
-      def balance
-        @balance.deref
-      end
-
-      def deposit(amount)
-        LockingTransaction.run_in_transaction do
-          if amount > 0
-            @balance.set @balance.deref + amount
-            p "Deposited $#{amount} into account #{@name}"
-          else
-            raise "The amount must be greater than zero"
-          end
-        end
-      end
-
-      def withdraw(amount)
-        LockingTransaction.run_in_transaction do
-          if amount > 0 && @balance.deref >= amount
-            @balance.set @balance.deref - amount
-          else
-            raise "Can't withdraw $#{amount}; balance is $#{@balance.deref}"
-          end
-        end
+  def deposit(amount)
+    LockingTransaction.run_in_transaction do
+      if amount > 0
+        @balance.set @balance.deref + amount
+        p "Deposited $#{amount} into account #{@name}"
+      else
+        raise "The amount must be greater than zero"
       end
     end
+  end
 
-    def transfer(from, to, amount)
-      LockingTransaction.run_in_transaction do
-        to.deposit amount
-        from.withdraw amount
+  def withdraw(amount)
+    LockingTransaction.run_in_transaction do
+      if amount > 0 && @balance.deref >= amount
+        @balance.set @balance.deref - amount
+      else
+        raise "Can't withdraw $#{amount}; balance is $#{@balance.deref}"
       end
     end
+  end
+end
 
-    def transfer_and_print(from, to, amount)
-      begin
-        transfer from, to, amount
-      rescue StandardError => e
-        p "Transfer failed: #{e}"
-      end
+def transfer(from, to, amount)
+  LockingTransaction.run_in_transaction do
+    to.deposit amount
+    from.withdraw amount
+  end
+end
 
-      p "Balance of 'from' account (#{from.name}) is $#{from.balance}"
-      p "Balance of 'to' account (#{to.name}) is $#{to.balance}"
-    end
+def transfer_and_print(from, to, amount)
+  begin
+    transfer from, to, amount
+  rescue StandardError => e
+    p "Transfer failed: #{e}"
+  end
 
-    account1 = Account.new 1, 2000
-    account2 = Account.new 2, 100
+  p "Balance of 'from' account (#{from.name}) is $#{from.balance}"
+  p "Balance of 'to' account (#{to.name}) is $#{to.balance}"
+end
 
-    p "account1 balance is $#{account1.balance}"
-    p "account2 balance is $#{account2.balance}"
-    p "---"
+account1 = Account.new 1, 2000
+account2 = Account.new 2, 100
 
-    transfer_and_print account1, account2, 500
-    p "---"
-    transfer_and_print account1, account2, 5000
+p "account1 balance is $#{account1.balance}"
+p "account2 balance is $#{account2.balance}"
+p "---"
+
+transfer_and_print account1, account2, 500
+p "---"
+transfer_and_print account1, account2, 5000
+```
 
 The output of the above program is as follows&hellip; (notice that we see the deposit succeeds, but the transaction as a whole fails - i.e. the deposit is revoked - as we can't withdraw the requested amount)
 
-<!-- language-bash -->
-
-    "account1 balance is $2000"
-    "account2 balance is $100"
-    "---"
-    "Deposited $500 into account 2"
-    "Balance of 'from' account (1) is $1500"
-    "Balance of 'to' account (2) is $600"
-    "---"
-    "Deposited $5000 into account 2"
-    "Transfer failed: Can't withdraw $5000; balance is $1500"
-    "Balance of 'from' account (1) is $1500"
-    "Balance of 'to' account (2) is $600"
+```bash
+"account1 balance is $2000"
+"account2 balance is $100"
+"---"
+"Deposited $500 into account 2"
+"Balance of 'from' account (1) is $1500"
+"Balance of 'to' account (2) is $600"
+"---"
+"Deposited $5000 into account 2"
+"Transfer failed: Can't withdraw $5000; balance is $1500"
+"Balance of 'from' account (1) is $1500"
+"Balance of 'to' account (2) is $600"
+```
 
 <div id="7"></div>
 ## Actors
@@ -331,19 +331,19 @@ The Actor pattern has been made popular via Erlang and Scala (in the form of the
 
 I've yet to get around to writing any Scala code and so because Scala is the defacto example of the Akka framework I've decided to borrow an example from the official Akka site:
 
-<!--language-scala-->
-
-    case class Greeting(who: String)
-     
-    class GreetingActor extends Actor with ActorLogging {
-      def receive = {
-        case Greeting(who) ⇒ log.info("Hello " + who)
-      }
-    }
-     
-    val system = ActorSystem("MySystem")
-    val greeter = system.actorOf(Props[GreetingActor], name = "greeter")
-    greeter ! Greeting("Charlie Parker")
+```scala
+case class Greeting(who: String)
+ 
+class GreetingActor extends Actor with ActorLogging {
+  def receive = {
+    case Greeting(who) ⇒ log.info("Hello " + who)
+  }
+}
+ 
+val system = ActorSystem("MySystem")
+val greeter = system.actorOf(Props[GreetingActor], name = "greeter")
+greeter ! Greeting("Charlie Parker")
+```
 
 <div id="7-1"></div>
 ### Transactions and Actors?
@@ -410,39 +410,39 @@ Picking one model over another (Actor vs CSP) will be determined by the level of
 
 The following is an extremely simple demonstration of the CSP/channel model written in Go (there is a channel which accepts an infinite number of messages; and our `main` function will take the messages from the channel as they become available):
 
-<!--language-go-->
+```go
+package main
 
-    package main
+import (
+    "fmt"
+    "math/rand"
+    "time"
+)
 
-    import (
-        "fmt"
-        "math/rand"
-        "time"
-    )
+func main() {
+    c := createChannel("hello", 5)
 
-    func main() {
-        c := createChannel("hello", 5)
+    for i := range c {
+        fmt.Printf("You say: %q\n", i)
+    }
 
-        for i := range c {
-            fmt.Printf("You say: %q\n", i)
+    fmt.Println("I'm done.")
+}
+
+func createChannel(msg string, size int) <-chan string {
+    c := make(chan string, size)
+
+    go func() {
+        for i := 1; i <= size; i++ {
+            c <- fmt.Sprintf("%s %d", msg, i)
+            time.Sleep(time.Duration(rand.Intn(1e3)) * time.Millisecond)
         }
+        close(c)
+    }()
 
-        fmt.Println("I'm done.")
-    }
-
-    func createChannel(msg string, size int) <-chan string {
-        c := make(chan string, size)
-
-        go func() {
-            for i := 1; i <= size; i++ {
-                c <- fmt.Sprintf("%s %d", msg, i)
-                time.Sleep(time.Duration(rand.Intn(1e3)) * time.Millisecond)
-            }
-            close(c)
-        }()
-
-        return c
-    }
+    return c
+}
+```
 
 Again, it's important to realise that Channels are synchronous and can block/cause deadlocks. In Go you can implement a timeout as a way of avoiding deadlocks. I'm not currently sure if Clojure has a similar work-around built into the language or whether you have to manually implement that yourself.
 
@@ -467,17 +467,17 @@ For I/O intensive operations you'll want more threads than available cores. This
 
 To calculate how many more threads than cores you'll need for an intensive set of I/O operations, use the following algorithm: 
 
-<!-- language-ini -->
-
-    Number of Threads = Number of Available Cores / (1 - Blocking Coefficient)
+```ini
+Number of Threads = Number of Available Cores / (1 - Blocking Coefficient)
+```
 
 > Note: the blocking coefficient (coefficient being a fancy word that means: a value used as a multiplier) is different depending on the operation. For a computational operation it is 0, where as a fully blocking operation it is 1.
 
 An example of a blocking coefficient would be: `0.9` - which means a task blocks 90% (`0.9`) of the time & works only 10% (`0.1`) of the time. Meaning, if you had 2 cores then you'd want 20 threads.
 
-<!-- language-ini -->
-
-    2 / (1 - 0.9) = 20
+```ini
+2 / (1 - 0.9) = 20
+```
 
 <div id="9-3"></div>
 ### Even workload distribution
