@@ -86,7 +86,7 @@ Let's take a look at an example (in Ruby):
 def update
   mutex = Mutex.new
 
-  Thread.new { mutex.synchronize { data += 1} }.join
+  Thread.new { mutex.synchronize { data += 1 } }.join
 end
 ```
 
