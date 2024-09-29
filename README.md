@@ -21,7 +21,6 @@
     - [Calculating the number of Threads](#9-2)
     - [Even workload distribution](#9-3)
 
-<div id="1"></div>
 ## Introduction
 
 Concurrency is a difficult concept. Regardless of programming language or idiom that you use, the practice of programming a "thread-safe" application can be harder than you think.
@@ -35,7 +34,6 @@ In the first, we have concepts such as Threads, Locks and Mutexes. In the latter
 
 > "don't communicate by sharing memory; share memory by communicating"
 
-<div id="2"></div>
 ### Shared Memory
 
 The following diagram is an extremely simplistic view of how CPUs, Processes and Threads interact but should help us to better understand why code can become **NON** thread-safe (as far as the "Shared Memory" model is concerned; we'll see shortly that the "message passing" model side steps this issue):
@@ -52,14 +50,12 @@ Any time you create a new Thread and within that Thread you modify a mutable pie
 
 > Note: if you're also utilising immutable data structures (as found in more functional languages, but also languages such as Go where they "pass by value" rather than "pass by reference") then this also makes code less prone to thread-safety concerns (but that's a discussion for another day)
 
-<div id="3"></div>
 ### Message Passing
 
 The message passing model relies on no data being shared, but rather communication between processes happening via either a message bus or by piping messages down a channel (depending on which style is implemented in your programming language of choice).
 
 As well as avoiding the issue of data being shared, it also avoids the issue of trying to recover from failures (which thread/process is the correct one); which is a hard problem to reason about.
 
-<div id="4"></div>
 ## Various options
 
 There are four main types of solutions to the problem of thread-safe concurrency:
@@ -71,7 +67,6 @@ There are four main types of solutions to the problem of thread-safe concurrency
 
 Let's investigate each of these in turn:
 
-<div id="5"></div>
 ## Mutexes/Semaphores
 
 We'll be discussing specifically "mutexes" rather than "semaphores" (they have very similar purposes - in that they control access to specific data - although a mutex offers some additional guarantees which we won't go into here).
@@ -94,12 +89,10 @@ end
 
 This particular solution is the simplest of the three. BUT it doesn't take into account any logic for handling unexpected changes to data (we'll see what that means in the next section).
 
-<div id="5-1"></div>
 ### Atomic operations
 
 Locks and mutexes allow operations to become *atomic*, meaning that the change happens "as a whole". Meaning it becomes thread safe because another thread can't accidentally read a piece of data/state/memory that is half done (e.g. `+=` in the above Ruby example would not be thread safe without the Mutex because a thread could read the value of `data` inbetween the read and the assignment that `+=` carries out).
 
-<div id="6"></div>
 ## STM
 
 Software Transactional Memory is known as being an "optimistic" process. Compare this to the lock-synchronisation mechanism of a Mutex, which implies the onus of whether a write action will succeed, should be on the "writer" (i.e. the "writer" locks the data, writes the data, then releases the lock). 
@@ -114,14 +107,12 @@ Because the STM retries transactions when they fail, we should ensure that code 
 
 In the Clojure programming language you'll also find that the STM facilitates "embedded transactions", which allows for greater atomicity. What this means in pratice, is that if there is a transaction that contains a sub-transaction, then in some implementations of the STM a failed transaction won't necessarily cause the sub-transaction to fail. But in Clojure it will. Meaning that it's definitely an atomic operation (all or nothing).
 
-<div id="6-1"></div>
 ### Clojure example
 
 The following example uses the Clojure programming language to implement a thead-safe modification via the STM (specifically the `ensure` function allows us to tell the STM what shared memory to watch for changes while our transaction is ongoing). 
 
 ---
 
-<div id="6-1-1"></div>
 #### Quick Clojure Concurrency Detour
 
 A quick detour before continuing onto the example code... 
@@ -216,7 +207,6 @@ Total balance is 1000
 
 > I didn't bother implementing this within my example, as it wasn't essential to understanding the code.
 
-<div id="6-2"></div>
 ### JRuby example
 
 If Clojure is a bit too much of a head spin (Lisp based languages can be quite confusing if you're new to the syntax/concepts) then let's see a similar example written in JRuby.
@@ -314,7 +304,6 @@ The output of the above program is as follows&hellip; (notice that we see the de
 "Balance of 'to' account (2) is $600"
 ```
 
-<div id="7"></div>
 ## Actors
 
 The basic premise of the Actors pattern is built upon it being a form of "message bus". The philosophy of the pattern is that *everything is an Actor*. An Actor receives messages and based on its state can determine whether it wants to handle the task defined in the message it has received, or to delegate the task off to other subordinates. An Actor can also create more Actors dynamically.
@@ -345,14 +334,12 @@ val greeter = system.actorOf(Props[GreetingActor], name = "greeter")
 greeter ! Greeting("Charlie Parker")
 ```
 
-<div id="7-1"></div>
 ### Transactions and Actors?
 
 Actors can also coordinate more safely by combining themselves via STM transactions. These are typically referred to as "transactors". The benefits of wrapping messages within a transaction is that we eliminate synchronisation concerns (i.e. as changes within a transaction are purposely *atomic*).
 
 > Note: in Clojure, when sending an action to an agent from inside a transaction, the call is still non-blocking and yet it also still abides by the STM rules (i.e. the action is *held* until the transaction commits)
 
-<div id="7-2"></div>
 ### Actors in Clojure
 
 Clojure does not support Actors, although it does have a mechanism known as "[agents](http://clojure.org/agents)". An agent provides access to shared mutable state, but does so asynchronously (much like an Actor). Where an Actor receives a "message", an agent accepts an `action`.
@@ -367,7 +354,6 @@ In Clojure, agents are transaction aware (where as atoms are not) and the `!` at
 
 Once the agent's state is changed, the next action is applied to the agent (now using the latest state it points to).
 
-<div id="7-3"></div>
 ### Differences between Agents and Erlang Actors
 
 There is one distinctive difference between Erlang's Actor and Clojure's Agent, which is that an Agents "action" doesn't block additional value request calls like an Erlang "message". This is demonstrated in the following image, but in summary: requests to an Actor are blocked until a response to the previous message can be provided; where as Clojure Agents allow multiple `@deref` calls to be made and processed:
@@ -376,7 +362,6 @@ There is one distinctive difference between Erlang's Actor and Clojure's Agent, 
 
 > Note: in the above image we have two simultaneous requests to "increment" the value held by the Actor/Agent. One can succeed, the other goes onto a queue and is applied after the first call finishes.
 
-<div id="7-4"></div>
 ### Limitations
 
 The Actor pattern does have some limitations:
@@ -390,7 +375,6 @@ The Actor pattern does have some limitations:
 - The Actor pattern works best when problems can be divided into sections that do not rely on each other
     - i.e. communication can be sporadic. If frequent interaction is needed or each section has a dependency on each other to coordinate the task then choose an alternative combination of concurrency models
 
-<div id="8"></div>
 ## CSP
 
 Communicating Sequential Processes is an alternative mechanism for expressing concurrency, which has been popularized by recent languages [Clojure](http://clojure.org/) and [Go](http://golang.org/). It also is based on the idea of message passing, similar to the Actor pattern.
@@ -446,12 +430,10 @@ func createChannel(msg string, size int) <-chan string {
 
 Again, it's important to realise that Channels are synchronous and can block/cause deadlocks. In Go you can implement a timeout as a way of avoiding deadlocks. I'm not currently sure if Clojure has a similar work-around built into the language or whether you have to manually implement that yourself.
 
-<div id="9"></div>
 ## Threads
 
 Threads are prevalent across both the "shared memory" and "message passing" models. The discussion of how many threads to create is an important one and depends on the type of tasks your application is expected to handle: CPU bound or I/O bound. In the following sections we'll cover this topic, as well as describing an algorithm for calculating this.
 
-<div id="9-1"></div>
 ### CPU vs I/O
 
 A CPU/Processor can contain one or more cores. For example, a quad core processor that runs at speed of 3GHz will have 4 cores running at that speed.
@@ -462,7 +444,6 @@ For computational intensive operations you'll want the number of threads to be e
 
 For I/O intensive operations you'll want more threads than available cores. This is because (as explained above) the CPU/Processor will "context switch" to another thread when the current thread is blocked (hence it is better to have more threads than cores for I/O).
 
-<div id="9-2"></div>
 ### Calculating the number of Threads
 
 To calculate how many more threads than cores you'll need for an intensive set of I/O operations, use the following algorithm: 
@@ -479,7 +460,6 @@ An example of a blocking coefficient would be: `0.9` - which means a task blocks
 2 / (1 - 0.9) = 20
 ```
 
-<div id="9-3"></div>
 ### Even workload distribution
 
 If you have two cores and a very large queue of messages to process, then your initial thought would maybe be to split the queue (i.e. the tasks) into two. This would mean you could have two threads running (i.e. utilising both cores); the first thread processing the first queue data and the second thread handling the other half of the queue data.
