@@ -1,14 +1,14 @@
 # concurrency
 
-- [Introduction](#1)
-  - [Shared Memory](#2)
-  - [Message Passing](#3)
-- [Various options](#4)
-  - [Mutexes/Semaphores](#5)
-  - [Software Transactional Memory (STM)](#6)
-  - [Actors](#7)
-  - [Communicating Sequential Processes (CSP)](#8)
-  - [Threads](#9)
+- [Introduction](#introduction)
+  - [Shared Memory](#shared-memory)
+  - [Message Passing](#message-passing)
+- [Various options](#various-options)
+  - [Mutexes/Semaphores](#mutexessemaphores)
+  - [Software Transactional Memory (STM)](#stm)
+  - [Actors](#actors)
+  - [Communicating Sequential Processes (CSP)](#csp)
+  - [Threads](#threads)
 
 ## Introduction
 
